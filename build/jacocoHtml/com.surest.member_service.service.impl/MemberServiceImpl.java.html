@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MemberServiceImpl.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">member-service</a> &gt; <a href="index.source.html" class="el_package">com.surest.member_service.service.impl</a> &gt; <span class="el_source">MemberServiceImpl.java</span></div><h1>MemberServiceImpl.java</h1><pre class="source lang-java linenums">package com.surest.member_service.service.impl;
+
+import com.surest.member_service.dto.MemberRequest;
+import com.surest.member_service.dto.MemberResponse;
+import com.surest.member_service.entities.MemberEntity;
+import com.surest.member_service.exception.MemberNotFoundException;
+import com.surest.member_service.exception.ResourceAlreadyExistsException;
+import com.surest.member_service.mapper.MemberMapper;
+import com.surest.member_service.repository.MemberRepository;
+import com.surest.member_service.service.MemberService;
+import com.surest.member_service.specification.MemberSpecification;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.CachePut;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.UUID;
+
+<span class="fc" id="L24">@Slf4j</span>
+@Service
+@RequiredArgsConstructor
+public class MemberServiceImpl implements MemberService {
+
+    private final MemberRepository memberRepository;
+
+    private final MemberMapper memberMapper;
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page&lt;MemberResponse&gt; getMembers(String firstName, String lastName, Pageable pageable) {
+<span class="nc" id="L36">        log.info(&quot;Fetching members with firstName: '{}' and lastName: '{}'&quot;, firstName, lastName);</span>
+<span class="nc" id="L37">        Page&lt;MemberResponse&gt; response = memberRepository.findAll(</span>
+<span class="nc" id="L38">                MemberSpecification.filterBy(firstName, lastName),</span>
+                pageable
+<span class="nc" id="L40">        ).map(MemberEntity::toResponse);</span>
+<span class="nc" id="L41">        log.info(&quot;Fetched {} members&quot;, response.getNumberOfElements());</span>
+<span class="nc" id="L42">        return response;</span>
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    @Cacheable(value = &quot;members&quot;, key = &quot;#memberId&quot;)
+    public MemberResponse getMemberById(UUID memberId) throws MemberNotFoundException {
+<span class="nc" id="L49">        log.info(&quot;Fetching member by ID: {}&quot;, memberId);</span>
+<span class="nc" id="L50">        MemberEntity memberEntity = memberRepository.findById(memberId)</span>
+<span class="nc" id="L51">                .orElseThrow(() -&gt; {</span>
+<span class="nc" id="L52">                    log.warn(&quot;Member not found with ID: {}&quot;, memberId);</span>
+<span class="nc" id="L53">                    return new MemberNotFoundException();</span>
+                });
+<span class="nc" id="L55">        log.info(&quot;Member found with ID: {}&quot;, memberId);</span>
+<span class="nc" id="L56">        return memberMapper.toResponse(memberEntity);</span>
+    }
+
+    @Override
+    @Transactional
+    public MemberResponse createMember(MemberRequest memberRequest) throws MemberNotFoundException {
+<span class="nc" id="L62">        log.info(&quot;Creating new member with email: {}&quot;, memberRequest.getEmail());</span>
+<span class="nc" id="L63">        memberRepository.findByEmail(memberRequest.getEmail())</span>
+<span class="nc" id="L64">                .ifPresent(existingMember -&gt; {</span>
+<span class="nc" id="L65">                    log.warn(&quot;Member already exists with email: {}&quot;, memberRequest.getEmail());</span>
+<span class="nc" id="L66">                    throw new ResourceAlreadyExistsException();</span>
+                });
+<span class="nc" id="L68">        MemberEntity memberEntity = memberMapper.toEntity(memberRequest);</span>
+<span class="nc" id="L69">        MemberEntity savedEntity = memberRepository.save(memberEntity);</span>
+<span class="nc" id="L70">        log.info(&quot;Member created successfully with ID: {}&quot;, savedEntity.getMemberId());</span>
+<span class="nc" id="L71">        return memberMapper.toResponse(savedEntity);</span>
+    }
+
+    @Override
+    @Transactional
+    @CachePut(value = &quot;members&quot;, key = &quot;#memberId&quot;)
+    public MemberResponse updateMember(UUID memberId, MemberRequest memberRequest) {
+<span class="nc" id="L78">        log.info(&quot;Updating member with ID: {}&quot;, memberId);</span>
+<span class="nc" id="L79">        MemberEntity existingMember = memberRepository.findById(memberId)</span>
+<span class="nc" id="L80">                .orElseThrow(() -&gt; {</span>
+<span class="nc" id="L81">                    log.warn(&quot;Member not found with ID: {}&quot;, memberId);</span>
+<span class="nc" id="L82">                    return new MemberNotFoundException();</span>
+                });
+<span class="nc" id="L84">        memberMapper.updateEntity(existingMember, memberRequest);</span>
+<span class="nc" id="L85">        MemberEntity savedEntity = memberRepository.save(existingMember);</span>
+<span class="nc" id="L86">        log.info(&quot;Member updated successfully with ID: {}&quot;, memberId);</span>
+<span class="nc" id="L87">        return memberMapper.toResponse(savedEntity);</span>
+    }
+
+    @Override
+    @Transactional
+    @CacheEvict(value = &quot;members&quot;, key = &quot;#memberId&quot;)
+    public void deleteMember(UUID memberId) {
+<span class="nc" id="L94">        log.info(&quot;Deleting member with ID: {}&quot;, memberId);</span>
+<span class="nc" id="L95">        MemberEntity memberEntity = memberRepository.findById(memberId)</span>
+<span class="nc" id="L96">                .orElseThrow(() -&gt; {</span>
+<span class="nc" id="L97">                    log.warn(&quot;Member not found with ID: {}&quot;, memberId);</span>
+<span class="nc" id="L98">                    return new MemberNotFoundException();</span>
+                });
+<span class="nc" id="L100">        log.info(&quot;Member deleted successfully with ID: {}&quot;, memberId);</span>
+<span class="nc" id="L101">        memberRepository.delete(memberEntity);</span>
+<span class="nc" id="L102">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>
